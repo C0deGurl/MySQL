@@ -1,0 +1,175 @@
+use Khadija;
+
+-- cleaning 
+UPDATE ocean_health_src
+SET value = NULL
+WHERE value = 'NA';
+
+-- integration 
+SELECT region_name
+FROM region_src
+WHERE region_name LIKE '%R\u00e9union%';
+
+UPDATE region_src
+SET region_name = 'Reunion'
+WHERE region_name = 'R\u00e9union';
+
+-- create tables 
+DROP TABLE IF EXISTS Goal;
+DROP TABLE IF EXISTS Subgoal;
+DROP TABLE IF EXISTS Region;
+DROP TABLE IF EXISTS Ocean_Health;
+
+CREATE TABLE Goal (
+goal_id VARCHAR(15) PRIMARY KEY,
+goal_description VARCHAR(50)
+);
+
+CREATE TABLE Subgoal (
+subgoal_id VARCHAR(10),
+goal_id VARCHAR(10),
+FOREIGN KEY (goal_id) REFERENCES Goal(goal_id)
+);
+
+CREATE TABLE Region (
+region_id INTEGER, 
+region_name VARCHAR(100),
+PRIMARY KEY (region_id)
+);
+
+CREATE TABLE Ocean_Health (
+year INTEGER,
+goal_id VARCHAR(10),  
+dimension VARCHAR(20) CHECK 
+(dimension IN ('future', 'pressures', 'resilience','score','status','trend')),
+region_id INTEGER, 
+value DECIMAL(5,2),
+PRIMARY KEY(year, goal_id,dimension,region_id),
+FOREIGN KEY (goal_id) REFERENCES GOAL(goal_id), 
+FOREIGN KEY (region_id) REFERENCES Region(region_id)
+);
+
+-- insert data 
+INSERT INTO Goal 
+SELECT * FROM goal_src;
+
+INSERT INTO Subgoal
+SELECT * FROM subgoal_src;
+
+INSERT INTO Region
+SELECT * FROM region_src;
+
+INSERT INTO Ocean_Health
+SELECT * FROM ocean_health_src;
+
+-- Q3
+SELECT *
+FROM region JOIN ocean_health ON region.region_id = ocean_health.region_id
+JOIN goal ON ocean_health.goal_id = goal.goal_id
+WHERE region_name LIKE 'Japan' AND goal_description LIKE 'Coastal Protection' AND Year = 2021;
+
+-- explanation: 
+-- The value of the current status dimension of Japan is 72.18 which shows the current status of goal based on current state relative to reference state.
+-- The future dimension is 71.71 and this is the predicted future status based on contributions of pressures, resilience, and trend. 
+-- The future dimension and current status dimension are different because it has a -0.01 trend value.
+-- The trend value represents the predicted proportional change in status after five years, based on average change in status per year multiplied by five, used to estimate future status.
+
+-- Q4 
+CREATE TABLE TempMaxMin AS
+SELECT value,year 
+FROM ocean_health 
+WHERE dimension LIKE 'score' AND goal_id LIKE 'index';
+
+SELECT DISTINCT year,value
+FROM TempMaxMin 
+WHERE value IN ((SELECT MAX(value)
+FROM TempMaxMin),
+(SELECT Min(value)
+FROM TempMaxMin))
+ORDER BY year ASC, value DESC;
+
+DROP TABLE TempMaxMin;
+
+-- 5 
+CREATE TABLE SouthAmerica (
+region_name VARCHAR(50));
+
+INSERT INTO SouthAmerica (region_name)
+VALUES('Argentina'), 
+	  ('Bolivia'),
+      ('Brazil'),
+      ('Chile'),
+      ('Colombia'),
+      ('Ecuador'),
+      ('Guyana'), 
+      ('Paraguay'), 
+      ('Peru'),
+      ('Suriname'),
+      ('Uruguay'),
+      ('Venezuela');
+
+SELECT SouthAmerica.region_name
+FROM SouthAmerica LEFT JOIN region ON SouthAmerica.region_name = region.region_name
+WHERE region_id IS NULL;
+
+DROP TABLE SouthAmerica;
+
+-- 6 
+CREATE TABLE HighBD AS
+SELECT year, goal.goal_id, goal_description, dimension, region.region_id, region_name, value
+FROM Ocean_Health JOIN Goal ON Ocean_Health.goal_id = Goal.goal_id
+JOIN Region ON Ocean_Health.region_id = Region.region_id 
+WHERE dimension LIKE 'score' AND Ocean_Health.goal_id LIKE 'BD';
+
+SELECT * 
+FROM HighBD
+WHERE value IN (SELECT MAX(value)
+FROM HighBD
+GROUP BY year);
+
+DROP TABLE HighBD;
+
+-- 7
+CREATE TABLE Fishing AS
+SELECT year, goal.goal_id, goal_description, dimension, region.region_id, region_name, value
+FROM Ocean_Health JOIN Goal ON Ocean_Health.goal_id = Goal.goal_id
+JOIN Region ON Ocean_Health.region_id = Region.region_id
+WHERE dimension LIKE 'status' AND goal_description LIKE '%fish%' 
+AND year = 2021 AND (value <= 10 OR value >=90);
+
+SELECT year, goal_id, goal_description, dimension, region_id, region_name, value,
+CASE WHEN value >= 90 THEN 'VISIT' WHEN value <= 10 THEN 'AVOID' ELSE 'false' END AS Fishing_Status
+FROM Fishing 
+ORDER BY value DESC, region_id ASC; 
+
+-- 8
+SELECT Goal.goal_id, Goal.goal_description
+FROM Goal 
+WHERE NOT EXISTS
+(SELECT * 
+FROM subgoal 
+WHERE subgoal.subgoal_id = goal.goal_id);
+
+-- 9
+SELECT subgoal_id, goal_description AS subgoal_descirption, goal.goal_id, goal.goal_description
+FROM Subgoal 
+JOIN Goal ON subgoal.goal_id = goal.goal_id
+ORDER BY goal_description; 
+
+-- 10: 
+CREATE TABLE India_Measurement (
+region_id INTEGER,
+-- region_name VARCHAR(15),
+goal_id VARCHAR(15),
+-- goal_description VARCHAR(15),
+dimension VARCHAR(15), 
+value INTEGER 
+);
+
+INSERT INTO India_Measurement 
+SELECT region_id, goal_id, dimension, value FROM Ocean_Health WHERE region_id = 203 AND dimension LIKE 'status';
+
+SELECT * FROM India_Measurement;
+
+
+
